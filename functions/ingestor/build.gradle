@@ -1,0 +1,74 @@
+// functions/ingestor/build.gradle
+
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.2.5' // Use a recent Spring Boot 3.2.x (Java 17 baseline)
+    id 'io.spring.dependency-management' version '1.1.5'
+    id "com.google.cloud.tools.jib" version "3.4.1" // Optional: For building container images directly via Jib later
+}
+
+group = 'dev.devanks.solarman' // Or your preferred group ID
+version = '0.0.1-SNAPSHOT' // Standard initial version
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21 // Target Java 21
+}
+
+repositories {
+    mavenCentral()
+}
+
+// Use Spring Cloud BOM for managing Spring Cloud dependency versions
+ext {
+    set('springCloudGcpVersion', "5.2.1") // Check for latest compatible version
+    set('springCloudVersion', "2023.0.1") // Corresponds to Spring Boot 3.2.x
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "com.google.cloud:libraries-bom:26.39.0" // GCP Libraries BOM
+        mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"
+        mavenBom "com.google.cloud:spring-cloud-gcp-dependencies:${springCloudGcpVersion}"
+    }
+}
+
+dependencies {
+    // Spring Cloud Function + Web Adapter (for HTTP trigger) + GCP Adapter
+    implementation 'org.springframework.cloud:spring-cloud-function-adapter-gcp'
+    // implementation 'org.springframework.cloud:spring-cloud-starter-function-webflux' // Needed if using web endpoint directly
+
+    // Spring Boot essentials
+    implementation 'org.springframework.boot:spring-boot-starter'
+    // implementation 'org.springframework.boot:spring-boot-starter-webflux' // If using WebFlux explicitly
+
+    // GCP Libraries
+    implementation 'com.google.cloud:google-cloud-firestore'
+    implementation 'com.google.cloud:google-cloud-secretmanager'
+    // implementation 'com.google.cloud:spring-cloud-gcp-starter' // Provides auto-configuration (optional but can be helpful)
+    implementation 'com.google.cloud:spring-cloud-gcp-starter-logging' // Auto-configures GCP structured logging
+
+    // Lombok for reducing boilerplate (optional but recommended)
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+    testCompileOnly 'org.projectlombok:lombok' // Also needed for tests
+    testAnnotationProcessor 'org.projectlombok:lombok'
+
+    // Testing
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    // testImplementation 'io.projectreactor:reactor-test' // If using WebFlux/Reactor
+}
+
+tasks.named('test') {
+    useJUnitPlatform() // Use JUnit 5
+}
+
+// Disable bootJar as it's not needed for typical SCF GCP deployment
+// and requires a main class we don't have.
+bootJar {
+    enabled = false
+}
+
+// Keep the standard jar task enabled (it builds the thin jar)
+jar {
+    enabled = true
+}
