@@ -37,6 +37,7 @@ dependencies {
     implementation 'org.springframework.cloud:spring-cloud-function-adapter-gcp'
     // implementation 'org.springframework.cloud:spring-cloud-starter-function-webflux' // Needed if using web endpoint directly
 
+    implementation 'org.springframework.boot:spring-boot-starter-validation' // For validation annotations (e.g., @Valid)
     // Spring Boot essentials
     implementation 'org.springframework.boot:spring-boot-starter'
     // implementation 'org.springframework.boot:spring-boot-starter-webflux' // If using WebFlux explicitly
