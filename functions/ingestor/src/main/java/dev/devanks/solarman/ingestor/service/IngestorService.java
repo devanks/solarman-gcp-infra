@@ -2,12 +2,12 @@
 package dev.devanks.solarman.ingestor.service;
 
 import dev.devanks.solarman.ingestor.client.SolarmanApiClient;
-import dev.devanks.solarman.ingestor.config.IngestorProperties;
-import dev.devanks.solarman.ingestor.entity.LatestSolarReadingEntity; // <<< Import Entities
-import dev.devanks.solarman.ingestor.entity.SolarReadingHistoryEntity;
 import dev.devanks.solarman.ingestor.exception.IngestionException;
+import dev.devanks.solarman.ingestor.mapper.HistoryReadingMapper;
+import dev.devanks.solarman.ingestor.mapper.LatestReadingMapper;
+import dev.devanks.solarman.ingestor.model.IngestionResult;
 import dev.devanks.solarman.ingestor.model.SolarmanAPIResponse;
-import dev.devanks.solarman.ingestor.repository.LatestSolarReadingRepository; // <<< Import Repositories
+import dev.devanks.solarman.ingestor.repository.LatestSolarReadingRepository;
 import dev.devanks.solarman.ingestor.repository.SolarReadingHistoryRepository;
 import feign.FeignException;
 import lombok.RequiredArgsConstructor;
@@ -23,107 +23,96 @@ import java.time.temporal.ChronoUnit;
 @Slf4j
 public class IngestorService {
 
-    private final IngestorProperties properties;
     private final SolarmanApiClient solarmanApiClient;
     private final LatestSolarReadingRepository latestReadingRepository;
     private final SolarReadingHistoryRepository historyRepository;
+    private final LatestReadingMapper latestMapper;
+    private final HistoryReadingMapper historyMapper;
 
-    public String performIngestion() {
+    /**
+     * Perform the ingestion process:
+     * 1. Call Solarman API
+     * 2. Map API response to entities
+     * 3. Save entities to Firestore
+     * 4. Return result object
+     *
+     * @return IngestionResult object containing status and details
+     */
+    public IngestionResult performIngestion() {
         log.info("Starting Solarman data ingestion process.");
         Instant start = Instant.now();
 
         try {
-            // 1. Call Solarman API via Feign Client
+            var apiResponse = getSolarmanAPIResponse();
+
+            // 2. Map API response to entities
+            var ingestedTimestamp = Instant.now();
+            var latestEntity = latestMapper.mapToEntity(apiResponse, ingestedTimestamp);
+            var historyEntity = historyMapper.mapToEntity(apiResponse, ingestedTimestamp);
+            var latestDocId = latestEntity.getId();
+            var historyDocId = historyEntity.getId();
+
+            // 3. Save entities to Firestore
+            log.info("Saving latest reading (ID: {})", latestDocId);
+            Mono<Void> saveOperation = latestReadingRepository.save(latestEntity)
+                    .doOnSuccess(saved -> log.info("Successfully saved latest reading ID: {}", saved.getId()))
+                    .doOnError(e -> log.error("Failed to save latest reading ID: {}", latestDocId, e))
+                    .then(Mono.defer(() -> {
+                        log.info("Saving history reading (ID: {})", historyDocId);
+                        return historyRepository.save(historyEntity)
+                                .doOnSuccess(saved -> log.info("Successfully saved history reading ID: {}", saved.getId()))
+                                .doOnError(e -> log.error("Failed to save history reading ID: {}", historyDocId, e));
+                    }))
+                    .then();
+
+            // 4. Block and Build Success Result
+            saveOperation.block(); // block() will throw if reactive chain had an error
+
+            return getIngestionResult(start, latestDocId, historyDocId);
+
+        } catch (Exception e) {
+            log.error("Ingestion process failed: {}", e.getMessage(), e);
+            return IngestionResult.builder()
+                    .status(IngestionResult.Status.FAILURE)
+                    .message("Ingestion failed: " + e.getMessage())
+                    .errorDetails(e.getClass().getName() + ": " + e.getMessage()) // Include exception type
+                    .build();
+        }
+    }
+
+    private static IngestionResult getIngestionResult(Instant start, String latestDocId, String historyDocId) {
+        long duration = ChronoUnit.MILLIS.between(start, Instant.now());
+
+        var ingestionResult = IngestionResult.builder()
+                .status(IngestionResult.Status.SUCCESS)
+                .message("Ingestion successful (mapped & saved)")
+                .durationMs(duration)
+                .latestDocumentId(latestDocId)
+                .historyDocumentId(historyDocId)
+                .build();
+        log.info("Ingestion result: {}", ingestionResult);
+        return ingestionResult;
+    }
+
+    /**
+     * Calls the Solarman API and returns the response.
+     *
+     * @return SolarmanAPIResponse object containing the API data
+     */
+    private SolarmanAPIResponse getSolarmanAPIResponse() {
+        // 1. Call Solarman API
+        try {
             log.info("Calling Solarman API via Feign client.");
-            SolarmanAPIResponse apiResponse = solarmanApiClient.getSystemData();
+            var apiResponse = solarmanApiClient.getSystemData();
             if (apiResponse == null) {
                 throw new IngestionException("Received null response from Solarman API (via Feign)");
             }
             log.info("Successfully received response from Solarman API.");
             log.debug("API Response Data: {}", apiResponse);
-
-            // 2. Process Response into intermediate structure (or directly map)
-            Instant ingestedTimestamp = Instant.now();
-            Instant readingTimestamp = parseReadingTimestamp(apiResponse, ingestedTimestamp);
-            boolean isOnline = "NORMAL".equalsIgnoreCase(apiResponse.getNetworkStatus());
-            double dailyKWh = (apiResponse.getGenerationValue() != null) ? apiResponse.getGenerationValue() : 0.0;
-            double currentW = (apiResponse.getGenerationPower() != null) ? apiResponse.getGenerationPower() : 0.0;
-
-            // 3. Map to Entities
-            LatestSolarReadingEntity latestEntity = createLatestEntity(dailyKWh, currentW, isOnline, readingTimestamp, ingestedTimestamp);
-            SolarReadingHistoryEntity historyEntity = createHistoryEntity(dailyKWh, currentW, isOnline, readingTimestamp, ingestedTimestamp);
-
-            // 4. Save Entities using Repositories (reactively, sequentially)
-            log.info("Saving latest reading (ID: {})", latestEntity.getId());
-            Mono<Void> saveOperation = latestReadingRepository.save(latestEntity)
-                    .doOnSuccess(saved -> log.info("Successfully saved latest reading ID: {}", saved.getId()))
-                    .doOnError(e -> log.error("Failed to save latest reading ID: {}", latestEntity.getId(), e))
-                    .then(Mono.defer(() -> { // Use Mono.defer to ensure history save happens after latest completes or errors
-                        log.info("Saving history reading (ID: {})", historyEntity.getId());
-                        return historyRepository.save(historyEntity)
-                                .doOnSuccess(saved -> log.info("Successfully saved history reading ID: {}", saved.getId()))
-                                .doOnError(e -> log.error("Failed to save history reading ID: {}", historyEntity.getId(), e));
-                    }))
-                    .then(); // Convert Mono<SolarReadingHistoryEntity> to Mono<Void>
-
-            // Block until reactive chain completes for the Supplier function
-            saveOperation.block(); // block() will throw exception if any save operation failed
-
-            long duration = ChronoUnit.MILLIS.between(start, Instant.now());
-            String successMsg = String.format("Ingestion successful (separate saves) in %d ms.", duration);
-            log.info(successMsg);
-            return successMsg;
-
+            return apiResponse;
         } catch (FeignException e) {
             log.error("Solarman API call failed (Feign): Status={}, Body={}", e.status(), e.contentUTF8(), e);
-            throw new IngestionException("Ingestion failed: Error calling Solarman API: " + e.getMessage(), e);
-        } catch (Exception e) { // Catch other exceptions (reactive block exceptions, mapping errors)
-            log.error("Ingestion process failed: {}", e.getMessage(), e);
-            // If block() threw an exception from the reactive chain, wrap it
-            throw new IngestionException("Ingestion failed: " + e.getMessage(), e);
+            throw new IngestionException("Solarman API call failed (Feign)", e);
         }
     }
-
-    // --- Helper to parse timestamp ---
-    private Instant parseReadingTimestamp(SolarmanAPIResponse response, Instant defaultTimestamp) {
-        if (response.getLastUpdateTime() != null && response.getLastUpdateTime() > 0) {
-            try {
-                return Instant.ofEpochSecond(response.getLastUpdateTime());
-            } catch (Exception e) {
-                log.warn("Failed to parse API timestamp {}, using default ({}) instead.", response.getLastUpdateTime(), defaultTimestamp, e);
-            }
-        } else {
-            log.warn("API timestamp missing or invalid, using default ({}) for readingTimestamp.", defaultTimestamp);
-        }
-        return defaultTimestamp;
-    }
-
-    // --- Helper to create Latest Entity ---
-    private LatestSolarReadingEntity createLatestEntity(double dailyKWh, double currentW, boolean isOnline, Instant readingTimestamp, Instant ingestedTimestamp) {
-        return LatestSolarReadingEntity.builder()
-                .id(properties.getGcp().getFirestoreLatestDocumentId()) // Use fixed ID from properties
-                .dailyProductionKWh(dailyKWh)
-                .currentPowerW(currentW)
-                .isOnline(isOnline)
-                .readingTimestamp(readingTimestamp)
-                .ingestedTimestamp(ingestedTimestamp)
-                .build();
-    }
-
-    // --- Helper to create History Entity ---
-    private SolarReadingHistoryEntity createHistoryEntity(double dailyKWh, double currentW, boolean isOnline, Instant readingTimestamp, Instant ingestedTimestamp) {
-        // Generate history document ID based on nanoseconds for uniqueness
-        String historyDocId = readingTimestamp.toEpochMilli()
-                + String.format("%06d", readingTimestamp.getNano() % 1_000_000);
-
-        return SolarReadingHistoryEntity.builder()
-                .id(historyDocId) // Use generated ID
-                .dailyProductionKWh(dailyKWh)
-                .currentPowerW(currentW)
-                .isOnline(isOnline)
-                .readingTimestamp(readingTimestamp)
-                .ingestedTimestamp(ingestedTimestamp)
-                .build();
-    }
-
 }
