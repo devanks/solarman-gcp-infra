@@ -100,9 +100,9 @@ resource "google_secret_manager_secret" "solarman_token" {
 # --- Ingestor Function Resources ---
 # --- Add this data source ---
 data "archive_file" "ingestor_source_zip" {
-  type        = "zip"
+  type = "zip"
   # Path to your function's source code directory, relative to this Terraform file
-  source_dir  = "../functions/ingestor"
+  source_dir = "../functions/ingestor"
   # Where Terraform will temporarily create the zip file before uploading
   # Using path.cwd ensures it's relative to where you run `terraform apply`
   output_path = "${path.cwd}/.terraform/build/solarman-ingestor-source-${timestamp()}.zip"
@@ -168,11 +168,15 @@ resource "google_project_iam_member" "ingestor_sa_firestore_user" {
   member  = "serviceAccount:${google_service_account.ingestor_function_sa.email}" # Use new SA email
 }
 
-# Grant Secret Manager Secret Accessor role to the new SA
-resource "google_project_iam_member" "ingestor_sa_secret_accessor" {
-  project = var.project_id
-  role    = "roles/secretmanager.secretAccessor"
-  member  = "serviceAccount:${google_service_account.ingestor_function_sa.email}" # Use new SA email
+# Grant Secret Manager Secret Accessor role ONLY for the specific Solarman token secret
+resource "google_secret_manager_secret_iam_member" "ingestor_sa_specific_secret_accessor" {
+  project   = google_secret_manager_secret.solarman_token.project
+  secret_id = google_secret_manager_secret.solarman_token.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.ingestor_function_sa.email}"
+
+  # Ensure the secret exists before trying to grant permission
+  depends_on = [google_secret_manager_secret.solarman_token]
 }
 
 # Grant Logs Writer role to the new SA (recommended for explicit permissions)
@@ -212,12 +216,12 @@ resource "google_cloudfunctions2_function" "ingestor_function" {
     service_account_email = google_service_account.ingestor_function_sa.email
 
     environment_variables = {
-      MAIN_CLASS = "dev.devanks.solarman.ingestor.IngestorApplication"
+      MAIN_CLASS                                  = "dev.devanks.solarman.ingestor.IngestorApplication"
       LOGGING_LEVEL_DEV_DEVANKS_SOLARMAN_INGESTOR = "DEBUG"
       # Other overrides if needed
     }
 
-    ingress_settings               = "ALLOW_ALL"
+    ingress_settings               = "ALLOW_INTERNAL_ONLY"
     all_traffic_on_latest_revision = true
   }
 
@@ -227,7 +231,7 @@ resource "google_cloudfunctions2_function" "ingestor_function" {
   depends_on = [
     google_storage_bucket_object.ingestor_function_source_zip,
     google_project_iam_member.ingestor_sa_firestore_user,
-    google_project_iam_member.ingestor_sa_secret_accessor,
+    google_secret_manager_secret_iam_member.ingestor_sa_specific_secret_accessor,
     google_project_iam_member.ingestor_sa_logs_writer,
   ]
 
@@ -236,11 +240,65 @@ resource "google_cloudfunctions2_function" "ingestor_function" {
   }
 }
 
-# --- Output Function URL (No changes needed) ---
-output "ingestor_function_url" {
-  value       = google_cloudfunctions2_function.ingestor_function.service_config[0].uri
-  description = "HTTPS URL of the ingestor Cloud Function"
+# --- End of Ingestor Function Resources ---
+# --- Cloud Scheduler Resources ---
+
+# 1. Service Account for the Scheduler Job
+resource "google_service_account" "scheduler_invoker_sa" {
+  project      = var.project_id
+  account_id   = "scheduler-ingestor-invoker" # Choose a unique ID
+  display_name = "SA for Cloud Scheduler Ingestor Invoker"
+  description  = "Service account used by Cloud Scheduler to invoke the solarman-ingestor function"
 }
 
-# --- End of Ingestor Function Resources ---
+# 2. Grant Invoker Role to the Scheduler SA for the specific function
+resource "google_cloudfunctions2_function_iam_member" "scheduler_invoker_binding" {
+  project        = google_cloudfunctions2_function.ingestor_function.project
+  location       = google_cloudfunctions2_function.ingestor_function.location
+  cloud_function = google_cloudfunctions2_function.ingestor_function.name
+  role           = "roles/cloudfunctions.invoker"
+  member         = "serviceAccount:${google_service_account.scheduler_invoker_sa.email}"
+
+  # Ensure the function exists before trying to grant permission
+  depends_on = [google_cloudfunctions2_function.ingestor_function]
+}
+
+# 3. Cloud Scheduler Job to Trigger the Ingestor Function
+resource "google_cloud_scheduler_job" "ingestor_trigger_job" {
+  project     = var.project_id
+  region      = var.region # Scheduler jobs are regional
+  name        = "solarman-ingestor-trigger"
+  description = "Triggers the solarman-ingestor function every 15 minutes"
+
+  # Schedule using App Engine cron syntax: https://cloud.google.com/appengine/docs/standard/scheduling-jobs-with-cron-yaml#cron_yaml_The_schedule_format
+  # This example runs every 15 minutes (0, 15, 30, 45 minutes past the hour)
+  schedule  = "*/15 * * * *"
+  time_zone = "UTC" # Use UTC or your preferred timezone
+
+  # Target the Cloud Function via HTTP
+  http_target {
+    # Use the function's HTTPS trigger URL (output from the function resource)
+    uri = google_cloudfunctions2_function.ingestor_function.service_config[0].uri
+
+    http_method = "GET"
+
+    # Use OIDC token for authentication
+    oidc_token {
+      # The service account the scheduler job will run as
+      service_account_email = google_service_account.scheduler_invoker_sa.email
+      # The audience should be the URL being invoked. Terraform might infer this,
+      # but explicitly setting it is safer.
+      audience = google_cloudfunctions2_function.ingestor_function.service_config[0].uri
+    }
+    # Note: No body is needed for this Supplier function trigger
+  }
+
+  # Attempt deadline (how long Scheduler waits for a response before marking as failed)
+  attempt_deadline = "180s" # Adjust based on function timeout + buffer
+
+  # Ensure the invoker role is granted before creating the job
+  depends_on = [google_cloudfunctions2_function_iam_member.scheduler_invoker_binding]
+}
+
+# --- End of Cloud Scheduler Resources ---
 

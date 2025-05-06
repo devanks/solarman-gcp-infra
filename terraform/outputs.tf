@@ -24,3 +24,8 @@ output "solarman_secret_name" {
   description = "Full resource name of the Secret Manager secret."
   value       = google_secret_manager_secret.solarman_token.name
 }
+
+output "ingestor_function_url" {
+  value       = google_cloudfunctions2_function.ingestor_function.service_config[0].uri
+  description = "HTTPS URL of the ingestor Cloud Function"
+}
