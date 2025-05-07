@@ -252,12 +252,23 @@ resource "google_service_account" "scheduler_invoker_sa" {
 }
 
 # 2. Grant Invoker Role to the Scheduler SA for the specific function
-resource "google_cloudfunctions2_function_iam_member" "scheduler_invoker_binding" {
+resource "google_cloudfunctions2_function_iam_member" "scheduler_function_invoker_binding" {
   project        = google_cloudfunctions2_function.ingestor_function.project
   location       = google_cloudfunctions2_function.ingestor_function.location
   cloud_function = google_cloudfunctions2_function.ingestor_function.name
   role           = "roles/cloudfunctions.invoker"
   member         = "serviceAccount:${google_service_account.scheduler_invoker_sa.email}"
+
+  # Ensure the function exists before trying to grant permission
+  depends_on = [google_cloudfunctions2_function.ingestor_function]
+}
+
+resource "google_cloud_run_service_iam_member" "scheduler_cloud_run_invoker_binding" {
+  project  = google_cloudfunctions2_function.ingestor_function.project
+  location = google_cloudfunctions2_function.ingestor_function.location
+  service  = google_cloudfunctions2_function.ingestor_function.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.scheduler_invoker_sa.email}"
 
   # Ensure the function exists before trying to grant permission
   depends_on = [google_cloudfunctions2_function.ingestor_function]
@@ -272,7 +283,7 @@ resource "google_cloud_scheduler_job" "ingestor_trigger_job" {
 
   # Schedule using App Engine cron syntax: https://cloud.google.com/appengine/docs/standard/scheduling-jobs-with-cron-yaml#cron_yaml_The_schedule_format
   # This example runs every 15 minutes (0, 15, 30, 45 minutes past the hour)
-  schedule  = "*/15 * * * *"
+  schedule  = "*/15 0-14 * * *"
   time_zone = "UTC" # Use UTC or your preferred timezone
 
   # Target the Cloud Function via HTTP
@@ -297,7 +308,9 @@ resource "google_cloud_scheduler_job" "ingestor_trigger_job" {
   attempt_deadline = "180s" # Adjust based on function timeout + buffer
 
   # Ensure the invoker role is granted before creating the job
-  depends_on = [google_cloudfunctions2_function_iam_member.scheduler_invoker_binding]
+  depends_on = [google_cloudfunctions2_function_iam_member.scheduler_function_invoker_binding,
+                 google_cloud_run_service_iam_member.scheduler_cloud_run_invoker_binding,
+                 google_service_account.scheduler_invoker_sa]
 }
 
 # --- End of Cloud Scheduler Resources ---
