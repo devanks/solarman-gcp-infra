@@ -11,17 +11,14 @@ import lombok.NoArgsConstructor;
 import java.time.Instant;
 
 @Data
-@Builder // Add builder
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-// Use property placeholder for collection name
 @Document(collectionName = "solar_readings_history")
 public class SolarReadingHistoryEntity {
 
-    @DocumentId // Identifies the document ID field
-    private String id; // Will be set to a dynamic timestamp-based ID
-
-    // Fields stored in Firestore (match SolarReadingPayload)
+    @DocumentId
+    private String id;
     private double dailyProductionKWh;
     private double currentPowerW;
     private boolean isOnline;

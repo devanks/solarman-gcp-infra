@@ -11,8 +11,8 @@ group = 'dev.devanks.solarman' // Or your preferred group ID
 version = '0.0.1-SNAPSHOT' // Standard initial version
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_21 // Target Java 21
-    targetCompatibility = JavaVersion.VERSION_21 // Target Java 21
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
 }
 
 repositories {
