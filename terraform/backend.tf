@@ -3,7 +3,7 @@
 terraform {
   backend "gcs" {
     bucket = "tfstate-solarman-data-ingestor" # MUST MATCH the bucket you just created
-    prefix = "terraform/state"             # Path within the bucket to store state files
+    prefix = "terraform/state"                # Path within the bucket to store state files
   }
   required_providers {
     google = {
