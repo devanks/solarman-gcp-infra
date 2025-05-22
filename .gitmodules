@@ -1,3 +1,6 @@
 [submodule "functions/archiver-java"]
 	path = functions/archiver-java
 	url = https://github.com/devanks/archiver-java.git
+[submodule "functions/ingestor"]
+	path = functions/ingestor
+	url = https://github.com/devanks/solarman-ingestor.git
