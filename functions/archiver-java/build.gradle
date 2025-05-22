@@ -1,0 +1,85 @@
+// functions/archiver-java/build.gradle
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.2.7' // Use your Spring Boot version
+    id 'io.spring.dependency-management' version '1.1.5'
+}
+
+group = 'dev.devanks.solarman'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    toolchain {
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+ext {
+    set('googleCloudVersion', "26.59.0") // Use the latest GCP libraries version
+    set('springCloudGcpVersion', "6.1.1") // Use compatible Spring Cloud GCP version
+    set('springCloudVersion', "2024.0.1") // Use compatible Spring Cloud version
+    set('testcontainersVersion', "1.21.0") // Define Testcontainers version
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter'
+    implementation 'org.springframework.boot:spring-boot-starter-webflux' // If using WebFlux explicitly
+
+    implementation 'org.springframework.cloud:spring-cloud-function-adapter-gcp'
+
+    implementation 'com.google.cloud:spring-cloud-gcp-starter'
+    implementation 'com.google.cloud:spring-cloud-gcp-starter-data-firestore'
+    implementation 'com.google.cloud:spring-cloud-gcp-starter-storage'
+    implementation 'com.google.cloud:spring-cloud-gcp-starter-logging' // Auto-configures GCP structured logging
+
+    // Logstash Encoder for JSON formatting in Logback
+    implementation 'net.logstash.logback:logstash-logback-encoder:8.1'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+    // Lombok for reducing boilerplate (optional but recommended)
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+    testCompileOnly 'org.projectlombok:lombok'
+    testAnnotationProcessor 'org.projectlombok:lombok'
+
+    // Spring Boot Test Dependencies
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'io.projectreactor:reactor-test' // if using reactive
+
+    // Testcontainers Dependencies
+    testImplementation "org.testcontainers:testcontainers"
+    testImplementation "org.testcontainers:junit-jupiter"
+    testImplementation "org.testcontainers:gcloud"
+    // If a specific Firestore module becomes prominent, you might use:
+    // testImplementation "org.testcontainers:firestore:${testcontainersVersion}"
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "com.google.cloud:libraries-bom:${googleCloudVersion}" // GCP Libraries BOM
+        mavenBom "com.google.cloud:spring-cloud-gcp-dependencies:${springCloudGcpVersion}" // Spring Cloud GCP BOM
+        mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}" // Spring Cloud BOM
+        mavenBom "org.testcontainers:testcontainers-bom:${testcontainersVersion}" // Testcontainers BOM
+    }
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    // Optional: If your tests are slow due to Testcontainers startup/shutdown,
+    // you might want to increase timeouts for the test task in CI, etc.
+    // But usually, the defaults are fine.
+
+    // Ensure system properties set in tests (like for emulator host-port) are accessible
+    // This is generally true by default, but good to be aware of.
+}
+
+// Ensure the main class is set for GCP Buildpacks
+bootJar {
+    enabled = true
+    mainClass = 'dev.devanks.solarman.archiver.ArchiverApplication'
+}
