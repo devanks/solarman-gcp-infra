@@ -3,6 +3,7 @@ package dev.devanks.solarman.ingestor.model;
 
 import com.google.cloud.firestore.annotation.PropertyName;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -11,6 +12,7 @@ import java.time.Instant;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 public class SolarReadingPayload {
 
     // Fields stored in Firestore

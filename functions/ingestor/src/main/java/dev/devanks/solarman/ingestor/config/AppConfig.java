@@ -1,11 +1,22 @@
 // functions/ingestor/src/main/java/dev/devanks/solarman/ingestor/config/AppConfig.java
 package dev.devanks.solarman.ingestor.config;
 
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.reactive.function.client.WebClient;
 
 @Configuration
-@EnableConfigurationProperties(IngestorProperties.class) // Link IngestorProperties to Spring context
+@Slf4j // Add logger
 public class AppConfig {
-    // You can define other beans here if needed later
+
+    // Define the WebClient bean here
+    @Bean
+    public WebClient webClient() {
+        log.info("Initializing WebClient bean.");
+        // You can add default headers, timeouts, etc. here if needed
+        return WebClient.builder().build();
+    }
+
+    // No need for Firestore, SecretManagerService, CredentialsProvider beans anymore
 }

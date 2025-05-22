@@ -1,0 +1,9 @@
+{
+  "properties": [
+    {
+      "name": "ingestor.gcp.solarman-api-url",
+      "type": "java.lang.String",
+      "description": "The URL of the Solarman API to be used for data ingestion."
+    }
+  ]
+}

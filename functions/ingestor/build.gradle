@@ -12,6 +12,7 @@ version = '0.0.1-SNAPSHOT' // Standard initial version
 
 java {
     sourceCompatibility = JavaVersion.VERSION_21 // Target Java 21
+    targetCompatibility = JavaVersion.VERSION_21 // Target Java 21
 }
 
 repositories {
@@ -40,13 +41,18 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-validation' // For validation annotations (e.g., @Valid)
     // Spring Boot essentials
     implementation 'org.springframework.boot:spring-boot-starter'
-    // implementation 'org.springframework.boot:spring-boot-starter-webflux' // If using WebFlux explicitly
+    implementation 'org.springframework.boot:spring-boot-starter-webflux' // If using WebFlux explicitly
+    implementation 'org.springframework.cloud:spring-cloud-starter-openfeign'
 
     // GCP Libraries
-    implementation 'com.google.cloud:google-cloud-firestore'
-    implementation 'com.google.cloud:google-cloud-secretmanager'
-    // implementation 'com.google.cloud:spring-cloud-gcp-starter' // Provides auto-configuration (optional but can be helpful)
+    implementation 'com.google.cloud:spring-cloud-gcp-starter' // Provides auto-configuration (optional but can be helpful)
+    implementation 'com.google.cloud:spring-cloud-gcp-starter-secretmanager'
+    implementation 'com.google.cloud:spring-cloud-gcp-starter-data-firestore'
     implementation 'com.google.cloud:spring-cloud-gcp-starter-logging' // Auto-configures GCP structured logging
+
+
+    // Logstash Encoder for JSON formatting in Logback
+    implementation 'net.logstash.logback:logstash-logback-encoder:8.1'
 
     // Lombok for reducing boilerplate (optional but recommended)
     compileOnly 'org.projectlombok:lombok'
@@ -56,20 +62,16 @@ dependencies {
 
     // Testing
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    // testImplementation 'io.projectreactor:reactor-test' // If using WebFlux/Reactor
+    testImplementation 'io.projectreactor:reactor-test' // If using WebFlux/Reactor
 }
 
 tasks.named('test') {
     useJUnitPlatform() // Use JUnit 5
 }
 
-// Disable bootJar as it's not needed for typical SCF GCP deployment
-// and requires a main class we don't have.
 bootJar {
-    enabled = false
+    enabled = true
+    // Explicitly set the main class (your @SpringBootApplication class)
+    mainClass = 'dev.devanks.solarman.ingestor.IngestorApplication'
 }
 
-// Keep the standard jar task enabled (it builds the thin jar)
-jar {
-    enabled = true
-}

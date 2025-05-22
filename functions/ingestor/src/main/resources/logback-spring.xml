@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <!-- Include Spring Boot's base configuration -->
+    <include resource="org/springframework/boot/logging/logback/base.xml"/>
+
+    <!-- Define properties -->
+    <springProperty scope="context" name="appName" source="spring.application.name" defaultValue="solarman-ingestor"/>
+    <property name="CONSOLE_LOG_PATTERN" value="%clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint} %clr(${LOG_LEVEL_PATTERN:-%5p}) %clr([${appName},%X{traceId:-},%X{spanId:-}]){yellow} %clr(%logger{36}){cyan} - %m%n${LOG_EXCEPTION_CONVERSION_WORD:-%wEx}}"/>
+
+    <!-- == Appender for LOCAL Profile (Plain Text Console) == -->
+    <springProfile name="local">
+        <appender name="PLAIN_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+                <pattern>${CONSOLE_LOG_PATTERN}</pattern>
+                <charset>utf8</charset>
+            </encoder>
+        </appender>
+
+        <!-- Root logger configuration for 'local' profile -->
+        <root level="INFO">
+            <appender-ref ref="PLAIN_CONSOLE"/>
+        </root>
+
+        <!-- Example: Set specific logger level for local debugging -->
+        <logger name="dev.devanks.solarman.ingestor" level="DEBUG" additivity="false">
+            <appender-ref ref="PLAIN_CONSOLE"/>
+        </logger>
+        <logger name="org.springframework.cloud.gcp" level="DEBUG" additivity="false">
+            <appender-ref ref="PLAIN_CONSOLE"/>
+        </logger>
+        <logger name="com.google.cloud" level="INFO" additivity="false">
+            <appender-ref ref="PLAIN_CONSOLE"/>
+        </logger>
+
+    </springProfile>
+
+    <!-- == Appender for DEFAULT/GCP Profile (JSON Console) == -->
+    <!-- Active when 'local' profile is NOT active -->
+    <springProfile name="!local">
+        <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <!-- Include standard MDC properties (traceId, spanId added by Spring Cloud GCP) -->
+                <includeMdc>true</includeMdc>
+                <!-- Add custom fields if needed -->
+                <customFields>{"application_name":"${appName}"}</customFields>
+                <!-- Customize field names if necessary (optional) -->
+                <!-- <fieldNames>
+                    <timestamp>@timestamp</timestamp>
+                    <version>[ignore]</version> hide default version field
+                    <levelValue>[ignore]</levelValue> hide numeric level
+                </fieldNames> -->
+                <!-- Use UTC timestamps, common for cloud logging -->
+                <timeZone>UTC</timeZone>
+            </encoder>
+        </appender>
+
+        <!-- Root logger configuration for default/GCP profile -->
+        <root level="INFO">
+            <appender-ref ref="JSON_CONSOLE"/>
+        </root>
+
+        <!-- Set specific logger levels for production/GCP -->
+        <logger name="dev.devanks.solarman.ingestor" level="INFO" additivity="false">
+            <appender-ref ref="JSON_CONSOLE"/>
+        </logger>
+        <!-- Keep framework logs less verbose in production -->
+        <logger name="org.springframework" level="INFO" additivity="false">
+            <appender-ref ref="JSON_CONSOLE"/>
+        </logger>
+        <logger name="org.springframework.cloud.gcp" level="INFO" additivity="false">
+            <appender-ref ref="JSON_CONSOLE"/>
+        </logger>
+        <logger name="com.google.cloud" level="INFO" additivity="false">
+            <appender-ref ref="JSON_CONSOLE"/>
+        </logger>
+        <!-- Add other specific loggers as needed -->
+
+    </springProfile>
+
+</configuration>
