@@ -34,3 +34,18 @@ output "archiver_function_url" {
   value       = google_cloudfunctions2_function.archiver_function.service_config[0].uri
   description = "HTTPS URL of the archiver Cloud Function"
 }
+
+output "project_id" {
+  description = "GCP Project ID."
+  value       = var.project_id
+}
+
+output "region" {
+  description = "GCP region for resources."
+  value       = var.region
+}
+
+output "function_code_bucket_name" {
+  description = "Name of the GCS bucket for function code uploads."
+  value       = google_storage_bucket.function_code_bucket.name
+}

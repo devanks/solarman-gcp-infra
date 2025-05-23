@@ -132,13 +132,12 @@ resource "google_cloudfunctions2_function" "archiver_function" {
   }
 
   service_config {
-    max_instance_count    = 1
-    min_instance_count    = 0
-    available_memory      = "1Gi"
-    timeout_seconds       = 540
-    service_account_email = google_service_account.archive_function_sa.email
-    # ingress_settings      = "ALLOW_INTERNAL_ONLY" # Change back after testing
-    ingress_settings               = "ALLOW_ALL"
+    max_instance_count             = 1
+    min_instance_count             = 0
+    available_memory               = "512Mi"
+    timeout_seconds                = 540
+    service_account_email          = google_service_account.archive_function_sa.email
+    ingress_settings               = "ALLOW_INTERNAL_ONLY"
     all_traffic_on_latest_revision = true
     environment_variables = {
       MAIN_CLASS = "dev.devanks.solarman.archiver.ArchiverApplication"
@@ -163,7 +162,7 @@ resource "google_cloudfunctions2_function" "archiver_function" {
 # 7. Service Account for the Archiver Scheduler Job
 resource "google_service_account" "scheduler_archiver_invoker_sa" {
   project      = var.project_id
-  account_id   = "scheduler-archiver-invoker" # Choose a unique ID
+  account_id   = "scheduler-archiver-invoker"
   display_name = "SA for Cloud Scheduler Archiver Invoker"
   description  = "Service account used by Cloud Scheduler to invoke the firestore-archiver-java function"
 }
@@ -173,9 +172,8 @@ resource "google_cloudfunctions2_function_iam_member" "scheduler_archiver_invoke
   location       = google_cloudfunctions2_function.archiver_function.location
   cloud_function = google_cloudfunctions2_function.archiver_function.name
   role           = "roles/cloudfunctions.invoker"
-  # Use the same SA as the ingestor trigger scheduler for simplicity
-  member     = "serviceAccount:${google_service_account.scheduler_archiver_invoker_sa.email}"
-  depends_on = [google_cloudfunctions2_function.archiver_function]
+  member         = "serviceAccount:${google_service_account.scheduler_archiver_invoker_sa.email}"
+  depends_on     = [google_cloudfunctions2_function.archiver_function]
 }
 
 resource "google_cloud_run_service_iam_member" "scheduler_cloud_run_archiver_invoker_binding" {
@@ -196,16 +194,15 @@ resource "google_cloud_scheduler_job" "archiver_trigger_job" {
   name        = "firestore-archiver-trigger"
   description = "Triggers the Firestore archiver function daily"
 
-  # Example: Run daily at 3:00 AM UTC
+  # Example: Run daily at 2:00 AM UTC
   schedule  = "0 2 * * *"
   time_zone = "Etc/UTC"
 
   http_target {
     uri         = google_cloudfunctions2_function.archiver_function.service_config[0].uri
-    http_method = "POST" # Functions v2 HTTP triggers require POST for OIDC token
-    body = "e30="
+    http_method = "POST"
+    body        = "e30="
     oidc_token {
-      # Use the same SA as the ingestor trigger scheduler for simplicity
       service_account_email = google_service_account.scheduler_archiver_invoker_sa.email
       audience              = google_cloudfunctions2_function.archiver_function.service_config[0].uri
     }

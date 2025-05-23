@@ -36,20 +36,7 @@ resource "google_service_account" "ingestor_function_sa" {
   description  = "Service account used by the solarman-ingestor Cloud Function"
 }
 
-# 2. Cloud Storage Bucket for Function Code (No changes needed)
-resource "google_storage_bucket" "function_code_bucket" {
-  project                     = var.project_id
-  name                        = "${var.project_id}-ingestor-function-code"
-  location                    = var.region
-  uniform_bucket_level_access = true
-  force_destroy               = false
-
-  lifecycle {
-    prevent_destroy = false
-  }
-}
-
-# 3. Upload Function ZIP (No changes needed)
+# 2. Upload Function ZIP (No changes needed)
 resource "google_storage_bucket_object" "ingestor_function_source_zip" {
   # Use a name based on the archive file, maybe include a timestamp or hash for uniqueness if needed
   # Using the output_path's basename is usually sufficient if the bucket is dedicated
@@ -62,7 +49,7 @@ resource "google_storage_bucket_object" "ingestor_function_source_zip" {
   depends_on = [data.archive_file.ingestor_source_zip]
 }
 
-# 4. IAM Permissions for the *Dedicated* Service Account
+# 3. IAM Permissions for the *Dedicated* Service Account
 
 # Grant Firestore User role to the new SA
 resource "google_project_iam_member" "ingestor_sa_firestore_user" {
@@ -71,7 +58,7 @@ resource "google_project_iam_member" "ingestor_sa_firestore_user" {
   member  = "serviceAccount:${google_service_account.ingestor_function_sa.email}" # Use new SA email
 }
 
-# Grant Secret Manager Secret Accessor role ONLY for the specific Solarman token secret
+# 4. Grant Secret Manager Secret Accessor role ONLY for the specific Solarman token secret
 resource "google_secret_manager_secret_iam_member" "ingestor_sa_specific_secret_accessor" {
   project   = google_secret_manager_secret.solarman_token.project
   secret_id = google_secret_manager_secret.solarman_token.secret_id

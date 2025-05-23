@@ -85,6 +85,19 @@ resource "google_secret_manager_secret" "solarman_token" {
   }
 }
 
+# Cloud Storage Bucket for Function Code
+resource "google_storage_bucket" "function_code_bucket" {
+  project                     = var.project_id
+  name                        = "${var.project_id}-function-code"
+  location                    = var.region
+  uniform_bucket_level_access = true
+  force_destroy               = true
+
+  lifecycle {
+    prevent_destroy = false
+  }
+}
+
 # Note: We define the secret container here, but not its value (version).
 # The value should be added securely outside of Terraform code.
 # You can add the first version manually via GCP Console or using gcloud:
