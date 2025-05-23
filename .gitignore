@@ -3,3 +3,4 @@
 *.tfstate*
 
 .idea
+/functions/archiver-java/.idea/**

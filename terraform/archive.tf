@@ -144,7 +144,7 @@ resource "google_cloudfunctions2_function" "archiver_function" {
       MAIN_CLASS = "dev.devanks.solarman.archiver.ArchiverApplication"
       ARCHIVE_BUCKET_NAME : google_storage_bucket.firestore_archives_bucket.name
       ARCHIVE_DAYS_OLD : "0" # 0 Means the present day only
-      ARCHIVE_DELETION_ENABLED : "false"
+      ARCHIVE_DELETION_ENABLED : "true"
       LOGGING_LEVEL_DEV_DEVANKS_SOLARMAN_ARCHIVER : "DEBUG",
       LOGGING_LEVEL_ROOT : "INFO"
     }
